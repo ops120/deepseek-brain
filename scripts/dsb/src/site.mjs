@@ -281,10 +281,18 @@ export const EXTRACT_FN = () => {
   }
   const scopeText = msgScope ? msgScope.innerText || "" : body;
   const found = scopeText.match(/搜索到\s*(\d+)\s*个网页/);
+  // 「停止生成」必须是可见叶子节点的文字：body.includes 会被隐藏模板/无关文本误触发
+  const stopVisible = [...document.querySelectorAll("div,button,span")].some(
+    (el) =>
+      el.children.length === 0 &&
+      (el.textContent || "").trim() === "停止生成" &&
+      el.getClientRects().length > 0
+  );
   return {
     text,
+    answerCount: answers.length,
     reasoning: document.querySelectorAll('[class*="ds-think-content"]').length > 0,
-    stopVisible: body.includes("停止生成"),
+    stopVisible,
     citations,
     sourcesFound: found ? Number(found[1]) : null,
     composerEmpty: (document.querySelector("textarea")?.value ?? "").trim() === "",
@@ -311,6 +319,7 @@ export const MARKER_FN = () => {
   return {
     reasoning: thinkBlocks || textMarkers,
     externalLinks: external,
+    answers: document.querySelectorAll('[class*="ds-assistant-message-main-content"]').length,
   };
 };
 
@@ -322,23 +331,70 @@ export async function snapshotMarkers(page) {
   }
 }
 
-export async function waitForAnswer(page, { timeoutMs = 180000, pollMs = 1000, stableSamples = 3 } = {}) {
+/**
+ * 监听页面自身的 completion 流。
+ * 消息列表会虚拟化（旧消息被卸载），所以「助手消息条数」不能当基线；
+ * 网络信号才是可靠判据：该请求结束 = 生成结束。
+ */
+export function watchCompletion(page, urlPart = "/api/v0/chat/completion") {
+  const state = { seen: false, done: false, failed: false };
+  const match = (req) => req.url().includes(urlPart);
+  const onRequest = (req) => {
+    if (match(req)) state.seen = true;
+  };
+  const onFinished = (req) => {
+    if (match(req)) state.done = true;
+  };
+  const onFailed = (req) => {
+    if (match(req)) state.failed = true;
+  };
+  page.on("request", onRequest);
+  page.on("requestfinished", onFinished);
+  page.on("requestfailed", onFailed);
+  return {
+    get state() {
+      return { ...state };
+    },
+    reset() {
+      state.seen = false;
+      state.done = false;
+      state.failed = false;
+    },
+    dispose() {
+      page.off("request", onRequest);
+      page.off("requestfinished", onFinished);
+      page.off("requestfailed", onFailed);
+    },
+  };
+}
+
+/**
+ * 等本次回答完成。
+ * 主判据：completion 流未结束 → 一律视为生成中（避免把上一条答案误判成本次完成）。
+ * 次判据：文本连续 N 次采样不变 → 结束（网络信号缺失时的兜底）。
+ */
+export async function waitForAnswer(page, { timeoutMs = 180000, pollMs = 800, stableSamples = 3, completion = null, onPoll } = {}) {
   const started = Date.now();
   let last = "";
   let stable = 0;
-  let startedAnswer = false;
   let lastState = null;
   while (Date.now() - started < timeoutMs) {
     lastState = await page.evaluate(EXTRACT_FN).catch(() => null);
-    if (lastState) {
-      const t = lastState.text || "";
-      if (t.length > 0) startedAnswer = true;
-      if (startedAnswer && t === last && t.length > 0) stable += 1;
-      else stable = 0;
-      last = t;
-      if (startedAnswer && stable >= stableSamples && !lastState.stopVisible) {
-        return { ok: true, ...lastState, elapsedMs: Date.now() - started };
-      }
+    const cs = completion?.state ?? { seen: false, done: false, failed: false };
+    const generating = cs.seen && !cs.done && !cs.failed;
+    const text = lastState?.text ?? "";
+    if (!generating && text.length > 0 && text === last) stable += 1;
+    else stable = 0;
+    last = text;
+    onPoll?.({
+      len: text.length,
+      stable,
+      generating,
+      network: `${cs.seen ? "seen" : "-"}/${cs.done ? "done" : cs.failed ? "failed" : "-"}`,
+      answerCount: lastState?.answerCount ?? -1,
+    });
+    if (!generating && text.length > 0 && stable >= stableSamples) {
+      return { ok: true, ...lastState, elapsedMs: Date.now() - started, networkSignal: cs.seen };
     }
     await page.waitForTimeout(pollMs);
   }

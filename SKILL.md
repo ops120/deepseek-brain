@@ -78,10 +78,27 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask \
 2. `truncated:true` → 标注「可能截断」；必要时让 DeepSeek 继续或缩小问题范围。
 3. `ok:false` → 按 `reason` 处理；**不得**把失败伪装成结果。
 
-### 长任务：规划 / 审查循环（可选）
+### 长任务：与 DeepSeek 的协作循环（它出方案 → 你执行 → 它复核）
 
-需要 DeepSeek 出 PLAN、你执行、再让它 REVIEW 时，用 `[DSB]` 信封协议，
-见 `references/protocol.md`。上下文由你推送**最小片段**，绝不整仓上传。
+适用：任务足够大，值得让 DeepSeek 先规划、你执行、再让它复核。
+每一轮都复用同一线程（**不要** `--thread new`），上下文自然连贯。
+
+1. **起循环**——把目标写进临时文件，然后：
+
+   ```bash
+   dsb ask --protocol INIT --task dsb_xxxx --iteration 0 --prompt-file goal.txt --json
+   ```
+
+   看返回的 `protocol.reply.state`：`PLAN` = 拿到方案，继续第 2 步；`BLOCKED` = 停下，把 `NEEDS` 交给用户。
+2. **执行**——用你自己的工作流按方案干活（它不微管理你的工具调用）。
+3. **汇报**——执行完发 `--protocol EXECUTED --iteration <n>`，正文**只写元数据**
+   （改了哪些文件、测试结果），**不贴 diff、不贴日志**；要它看代码，就把**真正需要的片段**放进 prompt。
+4. **复核**——看 `protocol.reply.state`：`DONE` = 结束并向用户总结；`PLAN` = 还有下一轮，回到第 2 步；
+   `BLOCKED` = 停下，把原因交给用户。
+5. **限额**——默认 12 轮，到顶暂停问用户。
+
+进度自动写进工作区 session（`dsb thread status --json` 可查）。
+信封格式与各状态的字段要求见 `references/protocol.md`。
 
 ## 安全闸门（两道）
 

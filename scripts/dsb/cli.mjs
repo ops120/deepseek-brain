@@ -20,6 +20,7 @@ const { values: flags, positionals } = parseArgs({
     json: { type: "boolean", default: false },
     help: { type: "boolean", default: false },
     version: { type: "boolean", default: false },
+    protocol: { type: "string" },
     think: { type: "string" },
     search: { type: "string" },
     prompt: { type: "string" },
@@ -101,6 +102,35 @@ function parseOnOff(v, name) {
 
 function newRequestId() {
   return `dsb_${crypto.randomBytes(2).toString("hex")}`;
+}
+
+/* ------------------------------ [DSB] 协议 ------------------------------ */
+
+const PROTOCOL_STATES = ["INIT", "PLAN", "EXECUTING", "EXECUTED", "REVIEW", "HANDOFF"];
+
+// DeepSeek 回复的状态 → 本地 checkpoint（决定下一步等什么）
+const CHECKPOINT_FOR_REPLY = {
+  PLAN: { protocolState: "PLAN_RECEIVED", waitingFor: "none" },
+  REVIEW: { protocolState: "EXECUTED_SENT", waitingFor: "GPT_REVIEW" },
+  DONE: { protocolState: "DONE", waitingFor: "none" },
+  BLOCKED: { protocolState: "BLOCKED", waitingFor: "USER" },
+};
+
+export function buildProtocolMessage(state, body, { taskId, iteration }) {
+  return `[DSB]\nSTATE: ${state}\nTASK_ID: ${taskId}\nITERATION: ${iteration}\n\n${body}`;
+}
+
+export function parseProtocolReply(text) {
+  if (!text) return null;
+  const state = text.match(/STATE:\s*([A-Z_]+)/);
+  if (!state) return null;
+  const task = text.match(/TASK_ID:\s*(\S+)/);
+  const iter = text.match(/ITERATION:\s*(\d+)/);
+  return {
+    state: state[1],
+    taskId: task ? task[1] : null,
+    iteration: iter ? Number(iter[1]) : null,
+  };
 }
 
 /* ---------------------------------- setup --------------------------------- */
@@ -300,10 +330,26 @@ async function cmdAsk() {
   }
   if (!promptText) return fail("INVALID_ARGUMENTS", "缺少 --prompt 或 --prompt-file");
 
-  const gate = sanitizeOutbound(promptText, {
-    allowSensitive: !!flags["allow-sensitive"],
-    allowLarge: !!flags["allow-large"],
-  });
+  // [DSB] 协作协议：封装信封（状态 + 任务号 + 轮次），回复状态由代码解析
+  let protocolState = null;
+  let taskId = flags.task !== undefined ? String(flags.task) : session.taskId ?? null;
+  let iteration = flags.iteration !== undefined ? Number(flags.iteration) : Number(session.iteration) || 0;
+  if (flags.protocol !== undefined) {
+    if (flags.protocol === true) return fail("INVALID_ARGUMENTS", `--protocol 需要值：${PROTOCOL_STATES.join(" | ")}`);
+    protocolState = String(flags.protocol).toUpperCase();
+    if (!PROTOCOL_STATES.includes(protocolState)) {
+      return fail("INVALID_ARGUMENTS", `--protocol 只接受 ${PROTOCOL_STATES.join(" | ")}`);
+    }
+    if (!taskId) taskId = newRequestId();
+  }
+
+  const gate = sanitizeOutbound(
+    protocolState ? buildProtocolMessage(protocolState, promptText, { taskId, iteration }) : promptText,
+    {
+      allowSensitive: !!flags["allow-sensitive"],
+      allowLarge: !!flags["allow-large"],
+    }
+  );
   if (!gate.ok) return fail(gate.reason, gate.message);
   const subject = gate.text;
 
@@ -344,6 +390,12 @@ async function cmdAsk() {
 
   try {
     const page = ctx.pages()[0] ?? (await ctx.newPage());
+    if (process.env.DSB_LOG_LEVEL === "debug") {
+      page.on("requestfinished", (req) => {
+        const type = req.resourceType();
+        if (type === "xhr" || type === "fetch") log("debug", `xhr done ${req.url().slice(0, 140)}`);
+      });
+    }
     await site.gotoSite(page, targetUrl);
 
     let st = await site.pageState(page);
@@ -372,6 +424,7 @@ async function cmdAsk() {
     if (!sRes.ok) return fail(sRes.reason ?? "COMPOSER_NOT_FOUND", sRes.message ?? "找不到智能搜索开关");
 
     const markersBefore = await site.snapshotMarkers(page);
+    const completion = site.watchCompletion(page);
 
     const injected = await site.injectPrompt(page, subject);
     if (!injected.ok) return fail("SEND_FAILED", `输入注入失败（${injected.valueLength}/${injected.expected} 字符进入输入框）`);
@@ -379,10 +432,17 @@ async function cmdAsk() {
     const sent = await site.sendPrompt(page);
     if (!sent.ok) return fail(sent.reason, sent.message);
 
-    const ans = await site.waitForAnswer(page, { timeoutMs });
-    if (flags.debug) {
-      const file = saveDebugHtml(await page.content(), "ask");
-      process.stderr.write(`调试 HTML 已保存：${file}\n`);
+    const ans = await site.waitForAnswer(page, {
+      timeoutMs,
+      completion,
+      onPoll: (info) => log("debug", "waitForAnswer poll", info),
+    });
+    completion.dispose();
+    if (flags.debug || !ans.ok) {
+      const tag = ans.ok ? "ask" : "ask-timeout";
+      const file = saveDebugHtml(await page.content(), tag);
+      if (!ans.ok) process.stderr.write(`超时取证 HTML：${file}\n`);
+      else if (flags.debug) process.stderr.write(`调试 HTML 已保存：${file}\n`);
     }
 
     const markersAfter = await site.snapshotMarkers(page);
@@ -401,7 +461,18 @@ async function cmdAsk() {
     }
 
     const threadUrl = ans.url && /\/a\/chat\/s\//.test(ans.url) ? ans.url : session.threadUrl ?? null;
-    setSession({ threadUrl, title: session.title ?? null, state: "ANSWERED" }, wsid);
+    const protocolReply = protocolState ? parseProtocolReply(ans.text) : null;
+    const sessionPatch = { threadUrl, title: session.title ?? null };
+    if (protocolState) {
+      sessionPatch.taskId = taskId;
+      sessionPatch.iteration = iteration;
+      sessionPatch.state = protocolReply?.state ?? protocolState;
+      const cp = protocolReply ? CHECKPOINT_FOR_REPLY[protocolReply.state] : null;
+      if (cp) sessionPatch.checkpointPatch = cp;
+    } else {
+      sessionPatch.state = "ANSWERED";
+    }
+    setSession(sessionPatch, wsid);
     appendAudit(
       {
         ts: nowIso(),
@@ -409,6 +480,7 @@ async function cmdAsk() {
         threadUrl,
         requested,
         confirmed,
+        protocol: protocolState ? { sent: protocolState, reply: protocolReply?.state ?? null, taskId, iteration } : null,
         chars: ans.text?.length ?? 0,
         truncated: !ans.ok,
         redactions: gate.redactions,
@@ -431,6 +503,7 @@ async function cmdAsk() {
       redactions: gate.redactions.length ? gate.redactions : undefined,
       toggleClicks: [tRes.clicked ? "think" : null, sRes.clicked ? "search" : null].filter(Boolean),
       toggleState: { think: { before: tRes.before, after: tRes.after }, search: { before: sRes.before, after: sRes.after } },
+      protocol: protocolState ? { sent: protocolState, taskId, iteration, reply: protocolReply } : undefined,
     });
   } finally {
     if (!flags["keep-open"]) await ctx.close().catch(() => {});

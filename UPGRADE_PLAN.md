@@ -6,7 +6,8 @@
 >
 > 状态：**M0 已落地**（通用 Skill 标准的 `SKILL.md` v3 + `references/`，v2 存档于 `docs/legacy/SKILL.v2.md`）；
 > **M1 最小版已落地并通过真机验证**（`scripts/dsb`：setup/login/logout/doctor/ask/thread/session/logs/update-check，
-> 含发送前净化闸门与单元测试）；M2（MCP 工具面）、M3（`[DSB]` 协作协议）待做。
+> 含发送前净化闸门与 14 项单元测试）；**M3 协作协议（`[DSB]`）也已落地并跑通 PLAN → EXECUTED → DONE 全循环**；
+> M2（MCP 工具面）待做。
 
 ---
 

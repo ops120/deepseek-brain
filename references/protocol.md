@@ -15,7 +15,22 @@
 INIT → PLAN → EXECUTING → EXECUTED → REVIEW → (PLAN | DONE | BLOCKED)
 ```
 
-## 消息形状
+## 怎么跑（CLI 负责封装与解析）
+
+信封由 `dsb` 自动封装，回复状态由代码解析，你只写正文：
+
+```bash
+# 起循环
+dsb ask --protocol INIT --task dsb_f81a --iteration 0 --prompt-file goal.txt --json
+# 执行完汇报（正文只写元数据）
+dsb ask --protocol EXECUTED --iteration 1 --prompt-file report.txt --json
+```
+
+返回里读 `protocol.reply.state`（`PLAN` / `DONE` / `BLOCKED`）；
+`--task` / `--iteration` 省略时会自动沿用工作区 session 里的值。
+checkpoint 会自动写入 session（`dsb thread status --json` 可查）。
+
+## 消息形状（CLI 自动生成，此处仅供理解）
 
 ```
 [DSB]
