@@ -6,6 +6,9 @@ node_modules/
 debug/
 *.log
 
+# 文档目录：只留本地，不进版本库
+.doc/
+
 # 系统
 .DS_Store
 Thumbs.db
