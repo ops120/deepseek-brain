@@ -449,7 +449,10 @@ async function cmdAsk() {
     const requested = { think, search };
     const confirmed = {
       think: markersAfter.reasoning > markersBefore.reasoning,
-      search: markersAfter.externalLinks > markersBefore.externalLinks,
+      // 搜索生效证据：新增引用链接，或新增「搜索到 N 个网页」横幅
+      search:
+        markersAfter.externalLinks > markersBefore.externalLinks ||
+        (markersAfter.searchBanners ?? 0) > (markersBefore.searchBanners ?? 0),
     };
 
     if (!ans.ok && !ans.text) {

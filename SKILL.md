@@ -29,8 +29,20 @@ metadata:
 **不用**：
 
 - 用户有 DeepSeek API key 且要脚本化 / 批处理 → 直接打 API。
-- 只是搜个网页 → 用宿主自带的网页检索能力。
+- 用户明说「你自己搜一下」／只是要把某个**已知网址**取回来看 → 用宿主自带的网页检索能力。
 - 本地模型已经能做好，或数据不允许发往第三方 → 不要绕路。
+
+## 硬规则：不许用宿主搜索代替本 skill
+
+用户点名本 skill 时（`$deepseek-brain`、「用 deepseek 网页版」「让 deepseek 研究 / 查 / 分析 / 出方案 / 审查」），**必须走 `dsb`**，不得用 WebSearch / WebFetch / 宿主联网搜索来代替。
+
+判断标准：
+
+- 任务要的是**结论、调研、方案、审查、判断** → 走 `dsb`（哪怕它长得很像"搜索"）。
+- 只有当用户明确说「你自己搜」或只是取回一个已知页面 → 才用宿主检索。
+
+`dsb` 失败时按 `references/failure-taxonomy.md` 处理，**同类失败最多重试 2 次**；
+不要改用宿主搜索去凑一个答案，也不要在同一个失败查询上反复重试（实测这种循环最耗时且多半无果）。
 
 ## 前置：健康检查
 
@@ -44,7 +56,9 @@ node "<skill-root>/scripts/dsb/cli.mjs" doctor --json
 - `ok:false` → 按 `reason` 查 `references/failure-taxonomy.md`；
   `DEPENDENCY_MISSING` 走 `references/install.md`。
 - 若 `scripts/dsb/cli.mjs` 不存在：机制层未安装。告知用户并停下，
-  **不要**改用宿主浏览器工具手搓本流程。
+  **不要**改用宿主浏览器工具手搓本流程，也不要用宿主搜索顶替。
+
+跳过这一步、直接用宿主搜索硬凑答案，是本 skill 最常见、也最浪费时间的失败方式。
 
 ## 调用序列
 

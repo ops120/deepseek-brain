@@ -218,14 +218,18 @@ export const EXTRACT_FN = () => {
       if (child.nodeType !== 1) continue;
       const el = child;
       const cls = typeof el.className === "string" ? el.className : "";
-      if (cls.includes("ds-markdown-cite")) continue;
+      if (/cite/i.test(cls)) continue; // 引用角标（含其内部 opacity:0 的占位符）
+      const style = el.getAttribute ? el.getAttribute("style") || "" : "";
+      if (/opacity:\s*0(\D|$)/.test(style)) continue; // 不可见占位文本
       const tag = el.tagName.toLowerCase();
       if (tag === "br") {
         out += "\n";
         continue;
       }
       if (tag === "script" || tag === "style") continue;
-      const block = BLOCK.has(tag);
+      if (tag === "tr") out += "\n";
+      if (tag === "td" || tag === "th") out += " | ";
+      const block = BLOCK.has(tag) && tag !== "td" && tag !== "th";
       if (block) out += "\n";
       out += collectText(el);
       if (block) out += "\n";
@@ -265,8 +269,8 @@ export const EXTRACT_FN = () => {
   const seen = new Set();
   for (const root of [scope, msgScope].filter(Boolean)) {
     for (const a of root.querySelectorAll('a[href^="http"]')) {
-      // 只收引用角标（ds-markdown-cite）对应的来源链接；来源卡片本身不带标题
-      if (!a.querySelector('[class*="ds-markdown-cite"]')) continue;
+      // 只收引用角标对应的来源链接；来源卡片本身不带标题
+      if (!a.querySelector('[class*="cite" i]')) continue;
       const url = a.href;
       if (!url || seen.has(url)) continue;
       let host = url;
@@ -319,6 +323,7 @@ export const MARKER_FN = () => {
   return {
     reasoning: thinkBlocks || textMarkers,
     externalLinks: external,
+    searchBanners: (body.match(/搜索到\s*\d+\s*个网页/g) || []).length,
     answers: document.querySelectorAll('[class*="ds-assistant-message-main-content"]').length,
   };
 };
