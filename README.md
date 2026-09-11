@@ -119,6 +119,9 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" setup
 
 ## 快速上手
 
+> **以下命令假定你已按安装章节设置 `SKILL_ROOT`**（或已配好别名）；
+> 没设过就直接复制会因变量为空而报错，请先把占位路径换成你的实际安装目录。
+
 ```bash
 # 体检（建议每次任务前跑一次；--deep 才会真机探测并检查登录态）
 node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --json
@@ -149,7 +152,7 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ## 命令面
 
 `--json`（机器可读）与 `--debug`（保存页面 HTML 便于排障）为全局选项；
-`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor --deep` / `setup` / `login`）有意义，
+`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `setup` / `login`，以及带 `--deep` 的 `doctor`）有意义，
 对 `logout` / `logs` / `session` / `thread` / `update-check` 这类纯本地命令无效。
 各命令的完整参数以 `--help` 为准。
 
@@ -179,6 +182,9 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 卸载 = 删 skill 目录 + 删状态目录）。
 
 运行方式：`node "$SKILL_ROOT/scripts/dsb/cli.mjs" <命令>`。
+> ⚠️ **`--allow-sensitive` 是危险开关**：它会关闭除「私钥块拒绝」外的**全部脱敏**
+> （密钥形状、家目录路径等按原文发往站点）。仅在用户明确知情同意时使用，不要默认开启。
+
 
 ### doctor 检查项
 
@@ -295,6 +301,8 @@ dsb thread status --json
 | `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`——它会**关闭全部脱敏**（密钥形状、家目录路径等按原文发往站点），仅保留私钥块仍拒绝，请务必确认用户知情 |
 | `PAYLOAD_TOO_LARGE` | 正文超 50 KB | 摘要或分片；`--allow-large` 放宽到 200 KB |
 
+遇到站点改版等问题，可在 <https://github.com/ops120/deepseek-brain/issues> 反馈。
+
 **硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次
 （表中标注「重试一次」的失败码也计入这 2 次总额度）。
 
@@ -397,6 +405,7 @@ node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限�
 ## 项目结构
 
 ```
+LICENSE                 MIT 许可证
 SKILL.md                给 agent 的说明书（何时用、怎么调、失败怎么办）
 README.md               本文件
 references/
@@ -428,7 +437,7 @@ node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"
 
 | | deepseek-brain | gemini-brain | doubao-brain |
 | --- | --- | --- | --- |
-| CLI | `dsb` | `gmb` | `dbb` |
+| CLI（均为文档简写，实际入口是 `node <仓库>/scripts/<cli>/cli.mjs`） | `dsb` | `gmb` | `dbb` |
 | 定位 | 推理 + 联网搜索 | 生图 + 代码 Canvas | 生图 + **生视频** + 音乐/播客 |
 | 生图 | ✗ | ✓（2816×1536 原图） | ✓（2048×2048） |
 | 生视频 | ✗ | ✗ | ✓（1280×720） |
