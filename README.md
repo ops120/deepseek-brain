@@ -38,8 +38,9 @@
 | **多轮对话** | 同一线程复用上下文 | 默认复用工作区当前线程 |
 | **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED`（详见命令面的枚举说明） |
 
-> **网页版没有模型选择器**。可控的只有「深度思考」「智能搜索」两个开关，回答由 DeepSeek 的统一模型生成。
-> 因此 CLI **不提供** `--model`，也不会声称"给你用了某某模型"。
+> **网页版没有模型选择器**。可控的只有「深度思考」「智能搜索」两个开关，CLI 也不暴露模型选择，
+> 回答由网页版当前模式对应的模型生成（具体以站点为准）。因此 CLI **不提供** `--model`，
+> 也不会声称"给你用了某某模型"。
 
 **不支持**：生图、生视频、生音频、tool call / function calling（它就是聊天界面）。
 
@@ -75,7 +76,7 @@ git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-bra
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
 
 > **关于命令写法（重要）**：本文档里的 `dsb <命令>` 是**文档简写**，并非已安装的命令，
-> 等价于 `node "<skill-root>/scripts/dsb/cli.mjs" <命令>`，
+> 等价于 `node "$SKILL_ROOT/scripts/dsb/cli.mjs" <命令>`，
 > 其中 `<skill-root>` 就是 clone 下来的仓库目录（例如 `~/.agents/skills/deepseek-brain`）。
 >
 > **推荐先设变量再配别名**（按你的宿主任选一行改）：
@@ -84,6 +85,7 @@ git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-bra
 > # Codex：      SKILL_ROOT="$HOME/.codex/skills"
 > # 通用/ZCode： SKILL_ROOT="$HOME/.agents/skills"
 > SKILL_ROOT="$HOME/.agents/skills"      # ← 改成你实际用的那个
+> export SKILL_ROOT                      # 写进 ~/.bashrc 时也要 export，否则 alias 展开时会取不到
 > alias dsb='node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"'
 > ```
 > 不配别名也可以，把示例里的 `dsb` 整体替换成 `node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"`。
@@ -91,7 +93,7 @@ git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-bra
 ### 首次配置做了什么
 
 ```bash
-node "<skill-root>/scripts/dsb/cli.mjs" setup
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" setup
 ```
 
 1. 检查 Node 版本与系统浏览器
@@ -105,28 +107,28 @@ node "<skill-root>/scripts/dsb/cli.mjs" setup
 ## 快速上手
 
 ```bash
-# 体检（建议每次任务前跑一次，很快）
-node "<skill-root>/scripts/dsb/cli.mjs" doctor --json
+# 体检（建议每次任务前跑一次；要连登录态一起查就加 --deep）
+node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs" doctor --json
 
 # 写检查点（session set 的完整形态；protocol-state / waiting-for 只接受枚举值）
 #   --protocol-state: INIT | PLAN_RECEIVED | EXECUTING | EXECUTED_LOCAL | EXECUTED_SENT | DONE | BLOCKED
 #   --waiting-for:    none | BRAIN_PLAN | BRAIN_REVIEW | USER
-node "<skill-root>/scripts/dsb/cli.mjs" session set   --protocol-state PLAN_RECEIVED --waiting-for none --next-step "execute PLAN" --json
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" session set   --protocol-state PLAN_RECEIVED --waiting-for none --next-step "execute PLAN" --json
 
 # 普通问答（长 prompt 先写临时文件）
-node "<skill-root>/scripts/dsb/cli.mjs" ask \
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask \
   --prompt-file ./question.txt --json
 
 # 开深度思考 + 智能搜索
-node "<skill-root>/scripts/dsb/cli.mjs" ask \
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask \
   --prompt "分析这个报错的原因" --think on --search on --json
 
 # 带附件分析
-node "<skill-root>/scripts/dsb/cli.mjs" ask \
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask \
   --prompt "总结这份文档的要点" --attach ./report.pdf --json
 
 # 新开线程（默认复用工作区当前线程）
-node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ```
 
 对 agent 说人话也一样：**「用 deepseek 深度思考分析一下这个报错」**、**「问问 deepseek 这个设计有什么问题」**。
@@ -143,7 +145,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `setup` | 首次配置：装依赖 → 打开浏览器 → 人工登录 | `--timeout <ms>` |
 | `login` | 重新登录（登录态失效时用） | `--timeout <ms>` |
 | `logout` | 清除登录态（删除 `profile/` 目录） | — |
-| `doctor` | 体检 | `--deep`（真机探测页面/选择器）、`--html`（存页面 HTML） |
+| `doctor` | 体检 | `--deep`（真机探测页面/选择器；**同时才会检查登录态**）、`--html`（存页面 HTML，doctor 专有；全局的 `--debug` 也会存页面对比排障） |
 | `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread new`（省略则复用当前线程）、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
 | `thread` | 线程管理 | `status` / `use <url>` / `new` |
 | `session` | 工作区级线程与检查点 | `get` / `set`（见下方示例） |
@@ -162,7 +164,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 更新与卸载步骤见 [references/install.md](references/install.md)（更新 = `git pull`；
 卸载 = 删 skill 目录 + 删状态目录）。
 
-运行方式：`node "<skill-root>/scripts/dsb/cli.mjs" <命令>`。
+运行方式：`node "$SKILL_ROOT/scripts/dsb/cli.mjs" <命令>`。
 
 ### doctor 检查项
 
@@ -213,7 +215,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ## 协作协议（`[DSB]`）
 
 让 DeepSeek 当「规划与审查大脑」，**执行权始终在本地 agent 手里**。
-下面示例用 `dsb` 简写，未配置别名时请展开为 `node "<skill-root>/scripts/dsb/cli.mjs"`：
+下面示例用 `dsb` 简写，未配置别名时请展开为 `node "$SKILL_ROOT/scripts/dsb/cli.mjs"`：
 
 ```bash
 # ① 起循环
@@ -264,7 +266,7 @@ dsb thread status --json
 | `LOGIN_REQUIRED` | 登录失效 | 停；让用户登录，一次一个动作 |
 | `HUMAN_VERIFICATION_REQUIRED` | 人机验证 | 停；用户手动过盾后重试 |
 | `RATE_LIMITED` | 限流 | 停；按 `retryAfterMs` 退避 |
-| `COMPOSER_NOT_FOUND` / `SITE_CHANGED` | 站点改版、选择器漂移 | **版本问题**：`doctor --deep` 定位，修 `scripts/dsb/src/site.mjs` 并发版（不要现场硬试 DOM） |
+| `COMPOSER_NOT_FOUND` / `SITE_CHANGED` | 站点改版、选择器漂移 | **版本问题**：先 `doctor --deep` 确认；普通用户提 issue 等上游发版即可，`scripts/dsb/src/site.mjs` 的修改面向维护者（不要现场硬试 DOM） |
 | `SEND_FAILED` | 发送失败 | 重试一次 |
 | `STREAM_STALLED` | 流式停滞 / 超时 | 标注「可能截断」；可重试一次 |
 | `ANSWER_EMPTY` | 空回答 | 新线程重试一次 |
@@ -351,12 +353,12 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 
 ```bash
 # 1. 定位漂移（在 skill 根目录执行；<skill-root> 换成实际安装路径）
-node "<skill-root>/scripts/dsb/cli.mjs" doctor --deep --html --json
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --deep --html --json
 
 # 2. 改 scripts/dsb/src/site.mjs 里的选择器
 # 3. 验证：重跑 doctor --deep 确认选择器已被找到；净化闸门单测与站点层无关，仅作回归
-node "<skill-root>/scripts/dsb/cli.mjs" doctor --deep --json
-node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限额，不覆盖选择器
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --deep --json
+node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限额，不覆盖选择器
 # 4. 发版
 ```
 
@@ -395,7 +397,7 @@ scripts/dsb/
 运行单测（需在 skill 根目录下执行，或把路径换成绝对路径）：
 
 ```bash
-node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"
+node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"
 ```
 
 ## 同族项目
