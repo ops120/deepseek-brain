@@ -36,7 +36,7 @@
 | **文件 / 图片分析** | 上传文件或图片让 DeepSeek 分析 | `--attach a.pdf,b.png` |
 | **长文本** | 单次正文 ≤ 50 KB；超过会被闸门拒绝（`PAYLOAD_TOO_LARGE`），需先摘要或分片 | `--allow-large` 放宽到 200 KB |
 | **多轮对话** | 同一线程复用上下文 | 默认复用工作区当前线程 |
-| **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED` |
+| **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED`（详见命令面的枚举说明） |
 
 > **网页版没有模型选择器**。可控的只有「深度思考」「智能搜索」两个开关，回答由 DeepSeek 的统一模型生成。
 > 因此 CLI **不提供** `--model`，也不会声称"给你用了某某模型"。
@@ -60,6 +60,8 @@
 
 ```bash
 mkdir -p ~/.claude/skills ~/.codex/skills ~/.agents/skills   # 已存在则无副作用
+# Windows cmd:  mkdir "%USERPROFILE%\.claude\skills"
+# PowerShell:   mkdir "$env:USERPROFILE\.claude\skills" -Force
 
 # 三条命令按你的宿主任选其一，不要全都执行
 git clone https://github.com/ops120/deepseek-brain ~/.claude/skills/deepseek-brain     # Claude Code
@@ -67,18 +69,24 @@ git clone https://github.com/ops120/deepseek-brain ~/.codex/skills/deepseek-brai
 git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-brain     # 通用 / ZCode
 ```
 
-> Windows 的 cmd / PowerShell 不展开 `~`，请改用 `%USERPROFILE%\.claude\skills\...` 这类绝对路径。
+> Windows 的 cmd / PowerShell 不展开 `~`，请改用 `%USERPROFILE%` / `$env:USERPROFILE` 这类绝对路径。
+> 目标目录已存在时 `git clone` 会失败：改用 `git -C <目录> pull` 更新，或先删掉旧目录。
 
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
 
 > **关于命令写法（重要）**：本文档里的 `dsb <命令>` 是**文档简写**，并非已安装的命令，
 > 等价于 `node "<skill-root>/scripts/dsb/cli.mjs" <命令>`，
 > 其中 `<skill-root>` 就是 clone 下来的仓库目录（例如 `~/.agents/skills/deepseek-brain`）。
-> **直接复制示例前请先配别名**（路径按你的实际安装位置改）：
+>
+> **推荐先设变量再配别名**（按你的宿主任选一行改）：
 > ```bash
-> alias dsb='node "$HOME/.agents/skills/deepseek-brain/scripts/dsb/cli.mjs"'
+> # Claude Code：SKILL_ROOT="$HOME/.claude/skills"
+> # Codex：      SKILL_ROOT="$HOME/.codex/skills"
+> # 通用/ZCode： SKILL_ROOT="$HOME/.agents/skills"
+> SKILL_ROOT="$HOME/.agents/skills"      # ← 改成你实际用的那个
+> alias dsb='node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"'
 > ```
-> 不配别名也可以，把示例里的 `dsb` 整体替换成上面的 `node "..."` 全路径即可。
+> 不配别名也可以，把示例里的 `dsb` 整体替换成 `node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"`。
 
 ### 首次配置做了什么
 
@@ -126,8 +134,9 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ## 命令面
 
 `--json`（机器可读）与 `--debug`（保存页面 HTML 便于排障）为全局选项；
-`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor` / `setup` / `login` / `list-*` 等）有意义，
-对 `logout` / `logs` / `session` / `thread` / `update-check` 这类纯本地命令无效。各命令的完整参数以 `--help` 为准。
+`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor` / `setup` / `login`）有意义，
+对 `logout` / `logs` / `session` / `thread` / `update-check` 这类纯本地命令无效。
+各命令的完整参数以 `--help` 为准。
 
 | 命令 | 作用 | 关键参数 |
 | --- | --- | --- |
@@ -135,7 +144,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `login` | 重新登录（登录态失效时用） | `--timeout <ms>` |
 | `logout` | 清除登录态（删除 `profile/` 目录） | — |
 | `doctor` | 体检 | `--deep`（真机探测页面/选择器）、`--html`（存页面 HTML） |
-| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread`、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
+| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread new`（省略则复用当前线程）、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
 | `thread` | 线程管理 | `status` / `use <url>` / `new` |
 | `session` | 工作区级线程与检查点 | `get` / `set`（见下方示例） |
 | `logs` | 查看脱敏日志 | `-n <行数>`、`--verbose` |
@@ -233,16 +242,17 @@ dsb thread status --json
   "requestId": "dsb_ab12",
   "protocol": {
     "sent": "EXECUTED",
-    "reply": "DONE",
     "taskId": "dsb_f81a",
-    "iteration": 1
+    "iteration": 1,
+    "reply": { "state": "DONE", "taskId": "dsb_f81a", "iteration": 1 }
   },
   "text": "……逐字答案……"
 }
 ```
 
-> `protocol.sent` 是本次发出的状态；`protocol.reply` 是解析出的对方回复状态，
-> 取值为 `PLAN` / `DONE` / `BLOCKED`（无协议时为 `null`）。
+> `protocol.sent` 是本次发出的状态；`protocol.reply` 是对方回复的解析结果
+> （对象，含 `state` / `taskId` / `iteration`），其中 `state` 取值为 `PLAN` / `DONE` / `BLOCKED`；
+> 未走协议或对方回复里没有 `STATE:` 时 `reply` 为 `null`。
 > 完整字段要求见 [references/protocol.md](references/protocol.md)。
 
 ## 失败处理
@@ -261,6 +271,7 @@ dsb thread status --json
 | `UPLOAD_REJECTED` | 附件被拒 | 检查类型 / 大小（网页端限制由 DeepSeek 决定，CLI 不预设白名单） |
 | `THREAD_LOST` | 线程 404 | 新线程重问（或 HANDOFF） |
 | `LOCKED` | 浏览器被占用 | 等，或问用户 |
+| `INVALID_ARGUMENTS` | 参数值非法（如枚举值写错） | 按报错信息改正；常见于 `--protocol` 与 `--protocol-state` 混用 |
 | `DEPENDENCY_MISSING` | 依赖缺失 | `setup` 自愈 |
 | `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`（仅关闭脱敏，**私钥块仍拒绝**） |
 | `PAYLOAD_TOO_LARGE` | 正文超 50 KB | 摘要或分片；`--allow-large` 放宽到 200 KB |
@@ -343,8 +354,9 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 node "<skill-root>/scripts/dsb/cli.mjs" doctor --deep --html --json
 
 # 2. 改 scripts/dsb/src/site.mjs 里的选择器
-# 3. 跑单测（必须在 skill 根目录下执行）
-node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"
+# 3. 验证：重跑 doctor --deep 确认选择器已被找到；净化闸门单测与站点层无关，仅作回归
+node "<skill-root>/scripts/dsb/cli.mjs" doctor --deep --json
+node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限额，不覆盖选择器
 # 4. 发版
 ```
 
