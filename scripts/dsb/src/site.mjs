@@ -46,7 +46,7 @@ export async function waitForLogin(page, { timeoutMs = 600000, pollMs = 2500, on
     const st = await pageState(page).catch(() => null);
     if (st) {
       last = st;
-      if (st.challenge) return { ok: false, reason: "CLOUDFLARE_CHALLENGE", state: st };
+      if (st.challenge) return { ok: false, reason: "HUMAN_VERIFICATION_REQUIRED", state: st };
       if (st.hasComposer && !st.hasPassword && !st.hasTel) return { ok: true, state: st };
       onTick?.(st, Date.now() - started);
     }

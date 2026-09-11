@@ -6,7 +6,7 @@
 | reason | 含义 | 动作 | 对用户说 |
 | --- | --- | --- | --- |
 | `LOGIN_REQUIRED` | 网站重弹登录 / 会话过期 | 停；让用户在已打开的有头浏览器完成验证；「好了」后重试 | 「DeepSeek 要求重新验证，请在打开的浏览器里完成，好了叫我。」 |
-| `CLOUDFLARE_CHALLENGE` | 人机验证 | 同上；随后 `doctor --deep` 复检 | 「碰到人机验证，请在浏览器里手动过一下。」 |
+| `HUMAN_VERIFICATION_REQUIRED` | 人机验证 | 同上；随后 `doctor --deep` 复检 | 「碰到人机验证，请在浏览器里手动过一下。」 |
 | `RATE_LIMITED` | 限流 | 停；按 `retryAfterMs` 退避；可建议稍后再试 | 「DeepSeek 提示请求过于频繁，建议 N 分钟后再试。」 |
 | `COMPOSER_NOT_FOUND` | 输入框定位失败 | 先 `doctor --deep`；多半是前端改版 → 按 `SITE_CHANGED` 处理 | 不要把 DOM 细节讲给用户 |
 | `SITE_CHANGED` | 选择器漂移 | **版本问题**：`doctor --deep` 定位漂移项；告知维护者修 `scripts/dsb/src/site/selectors.ts` 并发版；不要现场硬试 DOM | 「DeepSeek 页面改版了，需要更新 deepseek-brain。」 |

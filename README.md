@@ -30,7 +30,7 @@
 | **深度思考** | 开启推理模式（网页版 UI 上是「深度思考」开关） | `--think on` |
 | **智能搜索** | 联网检索并给出摘要化结果 | `--search on` |
 | **文件 / 图片分析** | 上传文件或图片让 DeepSeek 分析 | `--attach a.pdf,b.png` |
-| **长文本** | 单次正文 ≤ 50 KB（`--allow-large` 放宽到 200 KB） | 自动分片注入 |
+| **长文本** | 单次正文 ≤ 50 KB；超过会被闸门拒绝（`PAYLOAD_TOO_LARGE`），需先摘要或分片 | `--allow-large` 放宽到 200 KB |
 | **多轮对话** | 同一线程复用上下文 | 默认复用工作区当前线程 |
 | **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED` |
 
@@ -60,6 +60,15 @@ git clone <repo-url> ~/.agents/skills/deepseek-brain     # 通用 / ZCode
 
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
 
+> **关于命令写法**：本文档里的 `dsb <命令>` 是简写，等价于
+> `node "<skill-root>/scripts/dsb/cli.mjs" <命令>`，其中 `<skill-root>` 就是 clone 下来的仓库目录
+> （例如 `~/.agents/skills/deepseek-brain`）。
+> 如果想用短命令，自己做个别名即可：
+> ```bash
+> alias dsb='node "$HOME/.agents/skills/deepseek-brain/scripts/dsb/cli.mjs"'
+> ```
+> 换个安装位置就改上面的路径。**后文示例为简洁起见使用 `dsb` 简写**，按上面的规则展开即可。
+
 ### 首次配置做了什么
 
 ```bash
@@ -79,6 +88,11 @@ node "<skill-root>/scripts/dsb/cli.mjs" setup
 ```bash
 # 体检（建议每次任务前跑一次，很快）
 node "<skill-root>/scripts/dsb/cli.mjs" doctor --json
+
+# 写检查点（session set 的完整形态；protocol-state / waiting-for 只接受枚举值）
+#   --protocol-state: INIT | PLAN_RECEIVED | EXECUTING | EXECUTED_LOCAL | EXECUTED_SENT | DONE | BLOCKED
+#   --waiting-for:    none | BRAIN_PLAN | BRAIN_REVIEW | USER
+node "<skill-root>/scripts/dsb/cli.mjs" session set   --protocol-state PLAN_RECEIVED --waiting-for none --next-step "execute PLAN" --json
 
 # 普通问答（长 prompt 先写临时文件）
 node "<skill-root>/scripts/dsb/cli.mjs" ask \
@@ -108,11 +122,14 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `login` | 重新登录（登录态失效时用） | `--timeout <ms>` |
 | `logout` | 清除登录态（清 profile 与 storage-state） | — |
 | `doctor` | 体检 | `--deep`（真机探测页面/选择器）、`--html`（存页面 HTML） |
-| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread`、`--protocol`、`--timeout`、`--allow-sensitive`、`--allow-large` |
+| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread`、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
 | `thread` | 线程管理 | `status` / `use <url>` / `new` |
-| `session` | 工作区级线程与检查点 | `get` / `set --protocol-state --waiting-for --next-step ...` |
+| `session` | 工作区级线程与检查点 | `get` / `set`（见下方示例） |
 | `logs` | 查看脱敏日志 | `-n <行数>`、`--verbose` |
 | `update-check` | 检查更新 | `--force` |
+
+更新与卸载步骤见 [references/install.md](references/install.md)（更新 = `git pull`；
+卸载 = 删 skill 目录 + 删状态目录）。
 
 运行方式：`node <skill-root>/scripts/dsb/cli.mjs <命令>`。
 
@@ -126,7 +143,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `stateDir` | 状态目录可写 |
 | `network` | 能访问站点（Node 直连失败不算死，会注明） |
 | `login` | **仅 `--deep` 时**：cookie 里有登录标志 |
-| `deep` | **仅 `--deep` 时**：真机探测页面状态 / 模型选择器，并截图 |
+| `deep` | **仅 `--deep` 时**：真机探测页面状态与两个开关（深度思考 / 智能搜索），并截图 |
 
 ## 返回值契约
 
@@ -149,12 +166,12 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 **字段说明**：
 
 - `modes.requested` —— 你要求的开关状态
-- `modes.confirmed` —— **实际生效**的开关状态，用回答内的证据独立判定：
+- `modes.confirmed` —— **根据回答内证据推断**的生效状态（不是站点 UI/请求层面的权威确认）：
   - `think` → 回答里是否出现推理块
   - `search` → 回答里是否带引用来源 / 是否出现「搜索到 N 个网页」
   - **两者不一致时必须在回复里标注**，不要默认生效
 - `truncated` —— `true` 表示可能被截断（超时或流式停滞），需要如实告知用户
-- `citations` —— 联网搜索的引用来源（域名 + URL）
+- `citations` —— 联网搜索的引用来源（标题 + URL）
 
 失败（**判别联合**，`reason` 可枚举）：
 
@@ -193,7 +210,7 @@ dsb thread status --json
 | reason | 含义 | 动作 |
 | --- | --- | --- |
 | `LOGIN_REQUIRED` | 登录失效 | 停；让用户登录，一次一个动作 |
-| `CLOUDFLARE_CHALLENGE` | 人机验证 | 停；用户手动过盾后重试 |
+| `HUMAN_VERIFICATION_REQUIRED` | 人机验证 | 停；用户手动过盾后重试 |
 | `RATE_LIMITED` | 限流 | 停；按 `retryAfterMs` 退避 |
 | `COMPOSER_NOT_FOUND` / `SITE_CHANGED` | 站点改版、选择器漂移 | **版本问题**：`doctor --deep` 定位，修 `src/site.mjs` 并发版（不要现场硬试 DOM） |
 | `SEND_FAILED` | 发送失败 | 重试一次 |
@@ -203,7 +220,7 @@ dsb thread status --json
 | `THREAD_LOST` | 线程 404 | 新线程重问（或 HANDOFF） |
 | `LOCKED` | 浏览器被占用 | 等，或问用户 |
 | `DEPENDENCY_MISSING` | 依赖缺失 | `setup` 自愈 |
-| `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送要用户明确同意 |
+| `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`（仅关闭脱敏，**私钥块仍拒绝**） |
 | `PAYLOAD_TOO_LARGE` | 正文超 50 KB | 摘要或分片；`--allow-large` 放宽到 200 KB |
 
 **硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次。
@@ -225,11 +242,13 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （或 ~/.local/state/）
 | `threads/<workspaceId>.json` | 工作区级线程与检查点 |
 | `outputs/<workspaceId>.jsonl` | 审计：每次问答一行**元数据**（requestId、模式、耗时、是否截断） |
 | `logs/dsb.log` | 脱敏日志（`dsb logs` 查看） |
-| `debug/` | 仅 `--debug` 时保存的页面 HTML / 截图 |
+| `debug/` | 仅 `--debug` 或失败时保存的页面 HTML / 截图 —— ⚠️ **可能含回答正文与你的输入，未脱敏**，排障后建议删除 |
 
 **隐私要点**：
 
-- 状态目录权限 `0700`，文件 `0600`
+- 状态目录权限 `0700`、文件 `0600`（**仅 Unix/macOS 生效**；Windows 上依赖用户目录 ACL，
+  不会出现"其他用户可读"的情况，但没有等价的 mode 位）
+- **不要把状态目录同步 / 备份 / 分享到云盘或 git** —— 里面的 `profile/` 含登录态
 - **回答正文默认不落盘**，只记录元数据
 - cookie / storageState **永不**导出到项目目录、**永不**进日志、**永不**进 prompt
 - 项目目录零残留（`.gitignore` 已排除常见临时产物）
@@ -256,7 +275,12 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （或 ~/.local/state/）
 3. **推理块检测要用差值**。多轮对话里，历史推理块会让「关闭深度思考」被误判成开启 ——
    现在用「发送前后推理块数量差」判定本次是否真的生效。
 4. **长文本注入方式**。直接设 `value` 会被 React 冲掉；逐字符输入慢且可能触发换行提交。
-   用原生 setter + `input` 事件，超 50 KB 分片。
+   用原生 setter + `input` 事件，并按 **8000 字符分片**写入（避免 React debouncer 丢帧）。
+   ⚠️ 注意区分两件事：
+   - **净化闸门**：正文超过 50 KB **直接拒绝**（`PAYLOAD_TOO_LARGE`），**不会自动分片**，
+     需你先摘要或拆成多次调用；`--allow-large` 把上限放宽到 200 KB
+   - **注入分片**：对**已通过闸门**的文本，写入时按 8000 字符分批，
+     纯属编辑器写入机制，与限额无关
 5. **引用角标会污染正文**。角标内常有 `opacity:0` 的占位符，`innerText` 会读出来 ——
    需要跳过不可见文本，并跳过引用角标节点。
 6. **表格会被拍平**。`td/th` 需要显式加分隔符，`tr` 需要换行。

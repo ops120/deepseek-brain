@@ -188,7 +188,7 @@ async function waitLoginFlow({ timeoutMs }) {
     return {
       ok: false,
       reason: res.reason,
-      loginState: res.reason === "CLOUDFLARE_CHALLENGE" ? "challenge" : "login-required",
+      loginState: res.reason === "HUMAN_VERIFICATION_REQUIRED" ? "challenge" : "login-required",
       state: res.state,
       screenshot: shot,
     };
@@ -211,7 +211,7 @@ async function cmdSetup() {
 
   const timeoutMs = Number(flags.timeout ?? 1800000);
   const res = await waitLoginFlow({ timeoutMs });
-  if (!res.ok) return fail(res.reason, res.reason === "CLOUDFLARE_CHALLENGE" ? "遇到人机验证，请手动完成后重试。" : "等待登录超时，请重试。", res);
+  if (!res.ok) return fail(res.reason, res.reason === "HUMAN_VERIFICATION_REQUIRED" ? "遇到人机验证，请手动完成后重试。" : "等待登录超时，请重试。", res);
   return emit({ ok: true, ...res, browser: br.path, stateDir: dirs().root });
 }
 
@@ -309,7 +309,7 @@ async function cmdDoctor() {
   if (deep && !deep.skipped) {
     if (deep.state.challenge) {
       ok = false;
-      reason = "CLOUDFLARE_CHALLENGE";
+      reason = "HUMAN_VERIFICATION_REQUIRED";
     } else if (deep.state.rateLimited) {
       ok = false;
       reason = "RATE_LIMITED";
@@ -410,7 +410,7 @@ async function cmdAsk() {
     await site.gotoSite(page, targetUrl);
 
     let st = await site.pageState(page);
-    if (st.challenge) return fail("CLOUDFLARE_CHALLENGE", "页面出现人机验证，请在浏览器里手动完成后重试。", { state: st });
+    if (st.challenge) return fail("HUMAN_VERIFICATION_REQUIRED", "页面出现人机验证，请在浏览器里手动完成后重试。", { state: st });
     if (st.hasPassword || st.hasTel) return fail("LOGIN_REQUIRED", "需要登录：请运行 dsb login（或 dsb setup）完成人工登录。", { state: st });
     if (st.rateLimited) return fail("RATE_LIMITED", "DeepSeek 提示请求过于频繁，请稍后再试。", { retryAfterMs: 300000 });
 

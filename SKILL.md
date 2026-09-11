@@ -137,7 +137,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask \
 
 只有这几种情况停下叫人：
 
-- `LOGIN_REQUIRED` / `CLOUDFLARE_CHALLENGE`：网站重弹验证。让用户在打开的浏览器里完成，等「好了」再继续。
+- `LOGIN_REQUIRED` / `HUMAN_VERIFICATION_REQUIRED`：网站重弹验证。让用户在打开的浏览器里完成，等「好了」再继续。
 - `RATE_LIMITED`：说明额度受限与建议等待时间，按 `retryAfterMs` 退避。
 - 需要用户对敏感数据外发做决定（`SENSITIVE_BLOCKED`）。
 
