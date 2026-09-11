@@ -4,7 +4,7 @@
 不需要 API key，不做逆向代理 —— 只驱动官方网页。
 
 - 由本地确定性 CLI（`dsb`）驱动，Agent 只负责调用与判断
-- 人工登录一次，之后长期复用；只有网站重弹验证时才再打扰你
+- 人工登录一次后**通常**可长期复用；网站重弹验证或会话过期时才再打扰你（CLI 会停下等人，不硬试）
 - 发送前有确定性脱敏闸门（私钥整段拒绝、密钥形状脱敏、家目录路径脱敏、尺寸上限）
 - 支持 `[DSB]` 协作协议：让 DeepSeek 做 PLAN → 你执行 → 它 REVIEW 的循环
 
@@ -34,9 +34,9 @@
 | **深度思考** | 开启推理模式（网页版 UI 上是「深度思考」开关） | `--think on` |
 | **智能搜索** | 联网检索并给出摘要化结果 | `--search on` |
 | **文件 / 图片分析** | 上传文件或图片让 DeepSeek 分析（支持逗号分隔多个路径） | `--attach a.pdf,b.png` |
-| **长文本** | 单次正文 ≤ 50 KB（按 UTF-8 字节计）；超过会被闸门拒绝（`PAYLOAD_TOO_LARGE`），需先摘要或分片 | `--allow-large` 放宽到 200 KB |
+| **长文本** | 单次正文 ≤ 50 KB（按 UTF-8 字节计）；超限报 `PAYLOAD_TOO_LARGE`，**需你手动摘要或拆成多次调用（CLI 不自动分片）** | `--allow-large` 放宽到 200 KB |
 | **多轮对话** | 同一线程复用上下文 | 默认复用工作区当前线程 |
-| **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED`（详见命令面的枚举说明） |
+| **协作循环** | 规划 / 执行 / 复核的迭代协议 | 如 `--protocol INIT`、`--protocol EXECUTED` 等，完整枚举见命令面 |
 
 > **网页版没有模型选择器**。可控的只有「深度思考」「智能搜索」两个开关，CLI 也不暴露模型选择，
 > 回答由网页版当前模式对应的模型生成（具体以站点为准）。因此 CLI **不提供** `--model`，
@@ -114,7 +114,7 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" setup
 3. 打开有头浏览器，**请你本人登录**（账号密码 / 扫码，agent 不接触凭证）
 4. 冒烟验证并保存登录态
 
-> **登录策略**：登录一次长期有效。之后只有网站**重弹验证**（登录页重现 / 会话过期 / 人机验证）时才需要你介入，
+> **登录策略**：登录一次通常长期有效。之后只有网站**重弹验证**（登录页重现 / 会话过期 / 人机验证）时才需要你介入，
 > CLI 会返回 `LOGIN_REQUIRED` 并停下，不会自作主张。
 
 ## 快速上手
@@ -207,8 +207,8 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
   "ok": true,
   "requestId": "dsb_ab12",
   "threadUrl": "https://chat.deepseek.com/a/chat/s/xxxx",
-  "modes": { "requested": { "think": true, "search": false },
-             "confirmed": { "think": true, "search": false } },
+  "modes": { "requested": { "think": true, "search": true },
+             "confirmed": { "think": true, "search": true } },
   "text": "……逐字答案……",
   "citations": [{ "title": "来源标题", "url": "https://…" }],
   "truncated": false,
@@ -251,7 +251,8 @@ dsb ask --protocol EXECUTED --iteration 1 --prompt-file report.txt --json
 # ④ 复核（需要对方复盘时用 REVIEW；回复状态同样解析为 DONE / PLAN / BLOCKED）
 dsb ask --protocol REVIEW --iteration 2 --prompt-file review-request.txt --json
 
-# 查进度（checkpoint 自动落盘）
+# 查进度（checkpoint 自动落盘，用 session get 读取；thread status 看线程）
+dsb session get --json
 dsb thread status --json
 ```
 
@@ -304,7 +305,7 @@ dsb thread status --json
 遇到站点改版等问题，可在 <https://github.com/ops120/deepseek-brain/issues> 反馈。
 
 **硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次
-（表中标注「重试一次」的失败码也计入这 2 次总额度）。
+（**所有自动重试合计**最多 2 次，表中标注「重试一次」的也占用该额度）。
 
 ## 状态、缓存与隐私
 
@@ -438,6 +439,8 @@ node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"
 | | deepseek-brain | gemini-brain | doubao-brain |
 | --- | --- | --- | --- |
 | CLI（均为文档简写，实际入口是 `node <仓库>/scripts/<cli>/cli.mjs`） | `dsb` | `gmb` | `dbb` |
+
+> 仅 deepseek-brain 无模型选择（网页版没有模型选择器）；他仓的模型与能力以各自 README 为准。
 | 定位 | 推理 + 联网搜索 | 生图 + 代码 Canvas | 生图 + **生视频** + 音乐/播客 |
 | 生图 | ✗ | ✓（2816×1536 原图） | ✓（2048×2048） |
 | 生视频 | ✗ | ✗ | ✓（1280×720） |
