@@ -4,9 +4,13 @@
 不需要 API key，不做逆向代理 —— 只驱动官方网页。
 
 - 由本地确定性 CLI（`dsb`）驱动，Agent 只负责调用与判断
-- 人工登录一次，长期复用；只有网站重弹验证时才再打扰你
+- 人工登录一次，之后长期复用；只有网站重弹验证时才再打扰你
 - 发送前有确定性脱敏闸门（私钥整段拒绝、密钥形状脱敏、家目录路径脱敏、尺寸上限）
 - 支持 `[DSB]` 协作协议：让 DeepSeek 做 PLAN → 你执行 → 它 REVIEW 的循环
+
+> ⚠️ **合规与账号风险**：本项目通过浏览器自动化驱动 DeepSeek 官方网页版，
+> 可能不符合其服务条款，存在账号被限流、弹人机验证甚至封禁的风险。
+> 请自行评估并遵守平台条款，**风险自负**；仅供低频个人使用，不要批量滥用。
 
 ## 目录
 
@@ -43,31 +47,38 @@
 
 ### 前置要求
 
-- **Node.js ≥ 20**（`node --version` 检查）
+- **Node.js ≥ 20**（`node --version` 检查），含 npm —— 首次配置要把 `playwright-core` 装到状态目录
 - 系统已装 **Chrome / Edge / Brave / Chromium** 任一（自动探测，不下载 Chromium）
 - 能访问 `chat.deepseek.com` 的**浏览器**（Node 直连可能因 TLS/代理失败，不影响使用）
 - 一个 DeepSeek 账号（**无需 API key**）
+- **需要图形界面**：首次配置会打开有头浏览器请你本人登录，纯 SSH / 容器环境无法完成
 
 ### 作为 Skill 安装
 
-本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**无需修改任何路径**：
+本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**无需修改任何路径**。
+目标目录不存在时先建父目录（`git clone` 不会自动创建）：
 
 ```bash
+mkdir -p ~/.claude/skills ~/.codex/skills ~/.agents/skills   # 已存在则无副作用
+
+# 三条命令按你的宿主任选其一，不要全都执行
 git clone https://github.com/ops120/deepseek-brain ~/.claude/skills/deepseek-brain     # Claude Code
 git clone https://github.com/ops120/deepseek-brain ~/.codex/skills/deepseek-brain      # Codex
 git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-brain     # 通用 / ZCode
 ```
 
+> Windows 的 cmd / PowerShell 不展开 `~`，请改用 `%USERPROFILE%\.claude\skills\...` 这类绝对路径。
+
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
 
-> **关于命令写法**：本文档里的 `dsb <命令>` 是简写，等价于
-> `node "<skill-root>/scripts/dsb/cli.mjs" <命令>`，其中 `<skill-root>` 就是 clone 下来的仓库目录
-> （例如 `~/.agents/skills/deepseek-brain`）。
-> 如果想用短命令，自己做个别名即可：
+> **关于命令写法（重要）**：本文档里的 `dsb <命令>` 是**文档简写**，并非已安装的命令，
+> 等价于 `node "<skill-root>/scripts/dsb/cli.mjs" <命令>`，
+> 其中 `<skill-root>` 就是 clone 下来的仓库目录（例如 `~/.agents/skills/deepseek-brain`）。
+> **直接复制示例前请先配别名**（路径按你的实际安装位置改）：
 > ```bash
 > alias dsb='node "$HOME/.agents/skills/deepseek-brain/scripts/dsb/cli.mjs"'
 > ```
-> 换个安装位置就改上面的路径。**后文示例为简洁起见使用 `dsb` 简写**，按上面的规则展开即可。
+> 不配别名也可以，把示例里的 `dsb` 整体替换成上面的 `node "..."` 全路径即可。
 
 ### 首次配置做了什么
 
@@ -114,13 +125,15 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 
 ## 命令面
 
-所有命令都支持 `--json`（机器可读），以及 `--debug`（保存页面 HTML 便于排障）、`--keep-open`（保留浏览器窗口）。
+`--json`（机器可读）与 `--debug`（保存页面 HTML 便于排障）为全局选项；
+`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor` / `setup` / `login` / `list-*` 等）有意义，
+对 `logout` / `logs` / `session` / `thread` / `update-check` 这类纯本地命令无效。各命令的完整参数以 `--help` 为准。
 
 | 命令 | 作用 | 关键参数 |
 | --- | --- | --- |
 | `setup` | 首次配置：装依赖 → 打开浏览器 → 人工登录 | `--timeout <ms>` |
 | `login` | 重新登录（登录态失效时用） | `--timeout <ms>` |
-| `logout` | 清除登录态（清 profile 与 storage-state） | — |
+| `logout` | 清除登录态（删除 `profile/` 目录） | — |
 | `doctor` | 体检 | `--deep`（真机探测页面/选择器）、`--html`（存页面 HTML） |
 | `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread`、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
 | `thread` | 线程管理 | `status` / `use <url>` / `new` |
@@ -128,10 +141,19 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `logs` | 查看脱敏日志 | `-n <行数>`、`--verbose` |
 | `update-check` | 检查更新 | `--force` |
 
+> **注意 `--protocol` 与 `--protocol-state` 是两套不同的枚举，别混用**：
+>
+> | 参数 | 用在哪 | 合法取值 |
+> | --- | --- | --- |
+> | `--protocol <状态>` | `ask` —— 发协议信封给 DeepSeek | `INIT` / `PLAN` / `EXECUTING` / `EXECUTED` / `REVIEW` / `HANDOFF` |
+> | `--protocol-state <状态>` | `session set` —— 写本地检查点 | `INIT` / `PLAN_RECEIVED` / `EXECUTING` / `EXECUTED_LOCAL` / `EXECUTED_SENT` / `DONE` / `BLOCKED` |
+>
+> 前者决定"这轮问什么"，后者只记录"本地做到哪了"；传错值会被 `INVALID_ARGUMENTS` 拒绝。
+
 更新与卸载步骤见 [references/install.md](references/install.md)（更新 = `git pull`；
 卸载 = 删 skill 目录 + 删状态目录）。
 
-运行方式：`node <skill-root>/scripts/dsb/cli.mjs <命令>`。
+运行方式：`node "<skill-root>/scripts/dsb/cli.mjs" <命令>`。
 
 ### doctor 检查项
 
@@ -181,7 +203,8 @@ node "<skill-root>/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 
 ## 协作协议（`[DSB]`）
 
-让 DeepSeek 当「规划与审查大脑」，**执行权始终在本地 agent 手里**：
+让 DeepSeek 当「规划与审查大脑」，**执行权始终在本地 agent 手里**。
+下面示例用 `dsb` 简写，未配置别名时请展开为 `node "<skill-root>/scripts/dsb/cli.mjs"`：
 
 ```bash
 # ① 起循环
@@ -199,9 +222,28 @@ dsb thread status --json
 ```
 
 - 信封由 CLI 自动封装，回复状态由代码解析（不靠 agent 读文本判断）
-- 迭代上限默认 12，到顶暂停问用户
+- `--task` / `--iteration` 省略时会自动沿用工作区 session 里的值（见 [references/protocol.md](references/protocol.md)）
+- 建议同一任务不超过 12 轮，到顶暂停问用户（这是给 agent 的使用约定，不是 CLI 参数）
 - 线程丢失 → 依据 session checkpoint 生成 HANDOFF 简报，**不粘贴日志或 diff**
-- 详细字段要求见 [references/protocol.md](references/protocol.md)
+- 协议模式下 `ask` 的返回值会多一个 `protocol` 字段：
+
+```json
+{
+  "ok": true,
+  "requestId": "dsb_ab12",
+  "protocol": {
+    "sent": "EXECUTED",
+    "reply": "DONE",
+    "taskId": "dsb_f81a",
+    "iteration": 1
+  },
+  "text": "……逐字答案……"
+}
+```
+
+> `protocol.sent` 是本次发出的状态；`protocol.reply` 是解析出的对方回复状态，
+> 取值为 `PLAN` / `DONE` / `BLOCKED`（无协议时为 `null`）。
+> 完整字段要求见 [references/protocol.md](references/protocol.md)。
 
 ## 失败处理
 
@@ -212,11 +254,11 @@ dsb thread status --json
 | `LOGIN_REQUIRED` | 登录失效 | 停；让用户登录，一次一个动作 |
 | `HUMAN_VERIFICATION_REQUIRED` | 人机验证 | 停；用户手动过盾后重试 |
 | `RATE_LIMITED` | 限流 | 停；按 `retryAfterMs` 退避 |
-| `COMPOSER_NOT_FOUND` / `SITE_CHANGED` | 站点改版、选择器漂移 | **版本问题**：`doctor --deep` 定位，修 `src/site.mjs` 并发版（不要现场硬试 DOM） |
+| `COMPOSER_NOT_FOUND` / `SITE_CHANGED` | 站点改版、选择器漂移 | **版本问题**：`doctor --deep` 定位，修 `scripts/dsb/src/site.mjs` 并发版（不要现场硬试 DOM） |
 | `SEND_FAILED` | 发送失败 | 重试一次 |
 | `STREAM_STALLED` | 流式停滞 / 超时 | 标注「可能截断」；可重试一次 |
 | `ANSWER_EMPTY` | 空回答 | 新线程重试一次 |
-| `UPLOAD_REJECTED` | 附件被拒 | 检查类型 / 大小 |
+| `UPLOAD_REJECTED` | 附件被拒 | 检查类型 / 大小（网页端限制由 DeepSeek 决定，CLI 不预设白名单） |
 | `THREAD_LOST` | 线程 404 | 新线程重问（或 HANDOFF） |
 | `LOCKED` | 浏览器被占用 | 等，或问用户 |
 | `DEPENDENCY_MISSING` | 依赖缺失 | `setup` 自愈 |
@@ -232,25 +274,25 @@ dsb thread status --json
 ```
 Windows  %LOCALAPPDATA%\deepseek-brain\
 macOS    ~/Library/Application Support/deepseek-brain/
-Linux    $XDG_STATE_HOME/deepseek-brain/   （或 ~/.local/state/）
+Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.local/state/deepseek-brain/）
 ```
 
 | 内容 | 说明 |
 | --- | --- |
 | `deps/` | `playwright-core`（不污染 skill 目录） |
-| `profile/` | 持久化浏览器 profile —— **登录态的唯一来源** |
+| `profile/` | 持久化浏览器 profile —— **登录态的唯一来源**（dsb 不额外导出 storage-state） |
 | `threads/<workspaceId>.json` | 工作区级线程与检查点 |
 | `outputs/<workspaceId>.jsonl` | 审计：每次问答一行**元数据**（requestId、模式、耗时、是否截断） |
 | `logs/dsb.log` | 脱敏日志（`dsb logs` 查看） |
-| `debug/` | 仅 `--debug` 或失败时保存的页面 HTML / 截图 —— ⚠️ **可能含回答正文与你的输入，未脱敏**，排障后建议删除 |
+| `debug/` | 仅 `--debug` 或失败时保存的页面 HTML / 截图 —— ⚠️ **可能含回答正文与你的输入，未脱敏**，排障后建议删除；**不要直接上传到公开 issue** |
 
 **隐私要点**：
 
 - 状态目录权限 `0700`、文件 `0600`（**仅 Unix/macOS 生效**；Windows 上依赖用户目录 ACL，
-  不会出现"其他用户可读"的情况，但没有等价的 mode 位）
+  通常仅当前用户可读，具体以你的 ACL 配置为准）
 - **不要把状态目录同步 / 备份 / 分享到云盘或 git** —— 里面的 `profile/` 含登录态
 - **回答正文默认不落盘**，只记录元数据
-- cookie / storageState **永不**导出到项目目录、**永不**进日志、**永不**进 prompt
+- cookie **永不**导出到项目目录、**永不**进日志、**永不**进 prompt
 - 项目目录零残留（`.gitignore` 已排除常见临时产物）
 - 日志经过脱敏（token 形状、Bearer、密钥键值）
 
@@ -297,23 +339,25 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （或 ~/.local/state/）
 唯一需要改的地方是 **`scripts/dsb/src/site.mjs`**（选择器集中在此）：
 
 ```bash
-# 1. 定位漂移
-node <skill-root>/scripts/dsb/cli.mjs doctor --deep --html --json
+# 1. 定位漂移（在 skill 根目录执行；<skill-root> 换成实际安装路径）
+node "<skill-root>/scripts/dsb/cli.mjs" doctor --deep --html --json
 
-# 2. 改 site.mjs 里的选择器
-# 3. 跑单测
-node scripts/dsb/tests/sanitize.test.mjs
+# 2. 改 scripts/dsb/src/site.mjs 里的选择器
+# 3. 跑单测（必须在 skill 根目录下执行）
+node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"
 # 4. 发版
 ```
 
 ## 边界
 
-- **低频辅助工具**：每次问答会真实打开一个浏览器窗口（几秒后自动关闭），请按"偶尔咨询"的频率使用，不要批量。
+- **低频辅助工具**：每次问答会真实打开一个浏览器窗口，用完自动关闭。普通问答几秒到几十秒，
+  请按"偶尔咨询"的频率使用，不要批量。
 - **不做批量 / 不做并发**：同一时间只跑一个会话。
-- **不做 web2api**：只驱动官方网页，不构造私有协议请求、不做逆向代理。
+- **不做 web2api**：只在本机驱动官方网页，不逆向私有协议、不做 HTTP 代理、不对外暴露接口。
 - **不生图 / 生视频 / 生音频**：网页版本身不支持。
 - **联网搜索是摘要化的**：要原文引用时用宿主自带的网页抓取能力直接取源页。
 - **无 tool call**：它是聊天界面，不会替任何人执行操作。
+- **合规风险**：自动化驱动网页版可能违反平台条款，存在限流/验证/封号风险，详见文首警告。
 
 ## 项目结构
 
@@ -336,10 +380,10 @@ scripts/dsb/
   tests/sanitize.test.mjs   14 项净化闸门单测
 ```
 
-运行单测：
+运行单测（需在 skill 根目录下执行，或把路径换成绝对路径）：
 
 ```bash
-node scripts/dsb/tests/sanitize.test.mjs
+node "<skill-root>/scripts/dsb/tests/sanitize.test.mjs"
 ```
 
 ## 同族项目
