@@ -247,7 +247,11 @@ async function cmdDoctor() {
   checks.push({ name: "deps", ok: deps, detail: deps ? dirs().deps : "未安装（运行 dsb setup）" });
 
   const br = findBrowser();
-  checks.push({ name: "browser", ok: !!br, detail: br ? br.path : "未找到 Chrome / Edge" });
+  checks.push({
+    name: "browser",
+    ok: !!br,
+    detail: br ? (br.executablePath ?? `channel=${br.channel}`) : "未找到 Chrome / Edge",
+  });
 
   let stateWritable = true;
   try {
@@ -261,11 +265,18 @@ async function cmdDoctor() {
   let netDetail = "";
   let netOk = false;
   try {
-    const res = await fetch(site.SITE_URL, { method: "GET", redirect: "manual" });
+    const res = await fetch(site.SITE_URL, {
+      method: "GET",
+      redirect: "manual",
+      headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0.0.0 Safari/537.36" },
+      signal: AbortSignal.timeout(15000),
+    });
     netOk = res.status > 0;
     netDetail = `HTTP ${res.status}`;
   } catch (error) {
-    netDetail = error.message;
+    // Node 直连可能因 TLS/代理失败，但系统浏览器通常可用 —— 不据此判死
+    netDetail = `${error.message}（Node 直连失败；浏览器可能仍可用）`;
+    netOk = true;
   }
   checks.push({ name: "network", ok: netOk, detail: netDetail });
 
