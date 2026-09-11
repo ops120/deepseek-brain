@@ -56,7 +56,8 @@
 
 ### 作为 Skill 安装
 
-本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**无需修改任何路径**。
+本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**仓库内部无需修改任何路径**
+（命令行入口另需按下一节配置 `SKILL_ROOT` 或使用完整路径）。
 目标目录不存在时先建父目录（`git clone` 不会自动创建）：
 
 ```bash
@@ -117,8 +118,8 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" setup
 ## 快速上手
 
 ```bash
-# 体检（建议每次任务前跑一次；要连登录态一起查就加 --deep）
-node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs" doctor --json
+# 体检（建议每次任务前跑一次；--deep 才会真机探测并检查登录态）
+node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --json
 
 # 写检查点（session set 的完整形态；protocol-state / waiting-for 只接受枚举值）
 #   --protocol-state: INIT | PLAN_RECEIVED | EXECUTING | EXECUTED_LOCAL | EXECUTED_SENT | DONE | BLOCKED
@@ -314,7 +315,7 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 - 状态目录权限 `0700`、文件 `0600`（**仅 Unix/macOS 生效**；Windows 上依赖用户目录 ACL，
   通常仅当前用户可读，具体以你的 ACL 配置为准）
 - **不要把状态目录同步 / 备份 / 分享到云盘或 git** —— 里面的 `profile/` 含登录态
-- **回答正文默认不落盘**，只记录元数据
+- **回答正文默认不落盘**，只记录元数据（例外：`--debug` 或失败时保存的 `debug/` 快照会含未脱敏正文，排障后请删除）
 - cookie **永不**导出到项目目录、**永不**进日志、**永不**进 prompt
 - 项目目录零残留（`.gitignore` 已排除常见临时产物）
 - 日志经过脱敏（token 形状、Bearer、密钥键值）
@@ -359,7 +360,10 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 
 ### 站点改版了怎么办
 
-唯一需要改的地方是 **`scripts/dsb/src/site.mjs`**（选择器集中在此）：
+**普通用户**：跑 `doctor --deep --json` 确认是选择器漂移（报 `SITE_CHANGED` / `COMPOSER_NOT_FOUND`）后，
+提 issue 等上游发版即可，不需要自己改代码。
+
+**维护者**：站点层改动通常只需改 **`scripts/dsb/src/site.mjs`**（选择器集中在此）：
 
 ```bash
 # 1. 定位漂移（在 skill 根目录执行）
