@@ -17,7 +17,7 @@
 
 ```bash
 # 示例：按你的宿主替换目标目录
-git clone <repo-url> ~/.claude/skills/deepseek-brain
+git clone https://github.com/ops120/deepseek-brain ~/.claude/skills/deepseek-brain
 ```
 
 ## 定位 skill 根
@@ -37,7 +37,7 @@ node "<skill-root>/scripts/dsb/cli.mjs" setup
 它会依次：
 
 1. 检查 Node 与网络；
-2. 把 npm 依赖与 Playwright chromium 安装到**状态目录**（不污染 skill 目录）；
+2. 把 npm 依赖（`playwright-core`）安装到**状态目录**（不污染 skill 目录）；
 3. 打开有头浏览器，**请用户自己登录 DeepSeek**——账号密码 / 扫码 / 短信码全部由用户输入，agent 不接触任何凭证；
 4. 冒烟问答一次，确认链路通。
 

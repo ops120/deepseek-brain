@@ -53,9 +53,9 @@
 本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**无需修改任何路径**：
 
 ```bash
-git clone <repo-url> ~/.claude/skills/deepseek-brain     # Claude Code
-git clone <repo-url> ~/.codex/skills/deepseek-brain      # Codex
-git clone <repo-url> ~/.agents/skills/deepseek-brain     # 通用 / ZCode
+git clone https://github.com/ops120/deepseek-brain ~/.claude/skills/deepseek-brain     # Claude Code
+git clone https://github.com/ops120/deepseek-brain ~/.codex/skills/deepseek-brain      # Codex
+git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-brain     # 通用 / ZCode
 ```
 
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
