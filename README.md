@@ -33,8 +33,8 @@
 | --- | --- | --- |
 | **深度思考** | 开启推理模式（网页版 UI 上是「深度思考」开关） | `--think on` |
 | **智能搜索** | 联网检索并给出摘要化结果 | `--search on` |
-| **文件 / 图片分析** | 上传文件或图片让 DeepSeek 分析 | `--attach a.pdf,b.png` |
-| **长文本** | 单次正文 ≤ 50 KB；超过会被闸门拒绝（`PAYLOAD_TOO_LARGE`），需先摘要或分片 | `--allow-large` 放宽到 200 KB |
+| **文件 / 图片分析** | 上传文件或图片让 DeepSeek 分析（支持逗号分隔多个路径） | `--attach a.pdf,b.png` |
+| **长文本** | 单次正文 ≤ 50 KB（按 UTF-8 字节计）；超过会被闸门拒绝（`PAYLOAD_TOO_LARGE`），需先摘要或分片 | `--allow-large` 放宽到 200 KB |
 | **多轮对话** | 同一线程复用上下文 | 默认复用工作区当前线程 |
 | **协作循环** | 规划 / 执行 / 复核的迭代协议 | `--protocol INIT\|EXECUTED`（详见命令面的枚举说明） |
 
@@ -70,25 +70,35 @@ git clone https://github.com/ops120/deepseek-brain ~/.codex/skills/deepseek-brai
 git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-brain     # 通用 / ZCode
 ```
 
-> Windows 的 cmd / PowerShell 不展开 `~`，请改用 `%USERPROFILE%` / `$env:USERPROFILE` 这类绝对路径。
+> Windows 的 cmd / PowerShell 不展开 `~`，请改用绝对路径，例如：
+> ```bat
+> :: cmd
+> git clone https://github.com/ops120/deepseek-brain "%USERPROFILE%\.agents\skills\deepseek-brain"
+> ```
+> ```powershell
+> # PowerShell
+> git clone https://github.com/ops120/deepseek-brain "$env:USERPROFILE\.agents\skills\deepseek-brain"
+> ```
 > 目标目录已存在时 `git clone` 会失败：改用 `git -C <目录> pull` 更新，或先删掉旧目录。
 
 装好后对 agent 说：**「用 deepseek-brain 完成首次配置」**。
 
 > **关于命令写法（重要）**：本文档里的 `dsb <命令>` 是**文档简写**，并非已安装的命令，
 > 等价于 `node "$SKILL_ROOT/scripts/dsb/cli.mjs" <命令>`，
-> 其中 `<skill-root>` 就是 clone 下来的仓库目录（例如 `~/.agents/skills/deepseek-brain`）。
+> 其中 `SKILL_ROOT` 就是你 clone 下来的仓库目录。
 >
-> **推荐先设变量再配别名**（按你的宿主任选一行改）：
+> **推荐先设变量再配别名**（路径按你的实际安装位置改）：
 > ```bash
-> # Claude Code：SKILL_ROOT="$HOME/.claude/skills"
-> # Codex：      SKILL_ROOT="$HOME/.codex/skills"
-> # 通用/ZCode： SKILL_ROOT="$HOME/.agents/skills"
-> SKILL_ROOT="$HOME/.agents/skills"      # ← 改成你实际用的那个
-> export SKILL_ROOT                      # 写进 ~/.bashrc 时也要 export，否则 alias 展开时会取不到
-> alias dsb='node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"'
+> # Claude Code：SKILL_ROOT="$HOME/.claude/skills/deepseek-brain"
+> # Codex：      SKILL_ROOT="$HOME/.codex/skills/deepseek-brain"
+> # 通用/ZCode： SKILL_ROOT="$HOME/.agents/skills/deepseek-brain"
+> SKILL_ROOT="$HOME/.agents/skills/deepseek-brain"   # ← 改成你实际用的那个
+> export SKILL_ROOT
+> alias dsb='node "$SKILL_ROOT/scripts/dsb/cli.mjs"'
 > ```
-> 不配别名也可以，把示例里的 `dsb` 整体替换成 `node "$SKILL_ROOT/deepseek-brain/scripts/dsb/cli.mjs"`。
+> 不配别名也可以，把示例里的 `dsb` 整体替换成 `node "$SKILL_ROOT/scripts/dsb/cli.mjs"`。
+> 想长期生效就把这几行写进 `~/.bashrc` / `~/.zshrc`；Windows cmd / PowerShell 没有 `alias`，
+> 请直接用完整 `node "..."` 路径，或自建 `.cmd` 包装脚本。
 
 ### 首次配置做了什么
 
@@ -136,7 +146,7 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ## 命令面
 
 `--json`（机器可读）与 `--debug`（保存页面 HTML 便于排障）为全局选项；
-`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor` / `setup` / `login`）有意义，
+`--keep-open`（保留浏览器窗口）只对会打开浏览器的命令（`ask` / `doctor --deep` / `setup` / `login`）有意义，
 对 `logout` / `logs` / `session` / `thread` / `update-check` 这类纯本地命令无效。
 各命令的完整参数以 `--help` 为准。
 
@@ -275,7 +285,7 @@ dsb thread status --json
 | `LOCKED` | 浏览器被占用 | 等，或问用户 |
 | `INVALID_ARGUMENTS` | 参数值非法（如枚举值写错） | 按报错信息改正；常见于 `--protocol` 与 `--protocol-state` 混用 |
 | `DEPENDENCY_MISSING` | 依赖缺失 | `setup` 自愈 |
-| `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`（仅关闭脱敏，**私钥块仍拒绝**） |
+| `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`——它会**关闭全部脱敏**（密钥形状、家目录路径等按原文发往站点），仅保留私钥块仍拒绝，请务必确认用户知情 |
 | `PAYLOAD_TOO_LARGE` | 正文超 50 KB | 摘要或分片；`--allow-large` 放宽到 200 KB |
 
 **硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次。
@@ -352,13 +362,13 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 唯一需要改的地方是 **`scripts/dsb/src/site.mjs`**（选择器集中在此）：
 
 ```bash
-# 1. 定位漂移（在 skill 根目录执行；<skill-root> 换成实际安装路径）
+# 1. 定位漂移（在 skill 根目录执行）
 node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --deep --html --json
 
 # 2. 改 scripts/dsb/src/site.mjs 里的选择器
-# 3. 验证：重跑 doctor --deep 确认选择器已被找到；净化闸门单测与站点层无关，仅作回归
+# 3. 验证：改完必须重跑 doctor --deep 确认真机探测通过（这才是站点层的主要验证手段）
 node "$SKILL_ROOT/scripts/dsb/cli.mjs" doctor --deep --json
-node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限额，不覆盖选择器
+node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"   # 仅覆盖脱敏/限额，与选择器无关，作回归用
 # 4. 发版
 ```
 
