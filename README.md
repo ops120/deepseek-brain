@@ -17,6 +17,7 @@
 - [能力](#能力)
 - [安装](#安装)
 - [快速上手](#快速上手)
+- [自然语言驱动举例](#自然语言驱动举例)
 - [命令面](#命令面)
 - [返回值契约](#返回值契约)
 - [协作协议](#协作协议dsb)
@@ -159,6 +160,30 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 ```
 
 对 agent 说人话也一样：**「用 deepseek 深度思考分析一下这个报错」**、**「问问 deepseek 这个设计有什么问题」**。
+
+## 自然语言驱动举例
+
+**不需要背命令**——直接对 agent 说人话就行。本 skill 的 `SKILL.md` 里声明了触发词，
+agent 认出后会自己去调 `dsb`（先体检、再提问、失败按可枚举失败码处理），你只管描述需求。
+
+| 你想做什么 | 直接对 agent 说 |
+| --- | --- |
+| 深度推理 / 疑难调试 | 「用 deepseek 深度思考分析一下这个报错」「让 deepseek 想想这段代码为什么会死锁」 |
+| 查实时信息（版本 / 价格 / 新闻） | 「让 deepseek 联网查一下这个库的最新版本」 |
+| 第三方审查 / 独立意见 | 「问问 deepseek 这个设计有什么问题」「让 deepseek 审一遍这段 SQL」 |
+| 分析文件 / PDF / 图片 | 「用 deepseek 分析这份 PDF 的要点」（agent 会自动用 `--attach` 传文件） |
+| 多轮追问 | 「再让 deepseek 展开讲讲第二点」（复用同一线程，不用重复给背景） |
+| 规划 → 执行 → 复核 | 「让 deepseek 先出方案，你按方案改，改完让它复核」 |
+
+使用要点：
+
+- **点名最稳**：话里带上「deepseek」或「dsb」，agent 就会走本 skill；也支持英文触发
+  （`use deepseek` / `ask deepseek` / `deepseek R1` / `deepseek deep thinking` / `deepseek web search` /
+  `second opinion from deepseek` / `deepseek file upload` / `deepseek PDF`）。
+- **首次要先配置**：需要先完成安装与首次登录（见 [安装](#安装) 章节），之后基本不用再管。
+- **不是「搜索」而是「咨询」**：本 skill 的硬规则要求 agent 走 CLI 而不是自己的宿主搜索；
+  如果它用搜索糊弄你，就说「用 deepseek-brain 的 CLI 做，不要用你自己的搜索」。
+- **失败会如实上报**：agent 会告诉你 `reason` 与建议动作，不会把失败包装成结果。
 
 ## 命令面
 
