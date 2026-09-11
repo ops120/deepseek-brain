@@ -100,8 +100,19 @@ git clone https://github.com/ops120/deepseek-brain ~/.agents/skills/deepseek-bra
 > alias dsb='node "$SKILL_ROOT/scripts/dsb/cli.mjs"'
 > ```
 > 不配别名也可以，把示例里的 `dsb` 整体替换成 `node "$SKILL_ROOT/scripts/dsb/cli.mjs"`。
-> 想长期生效就把这几行写进 `~/.bashrc` / `~/.zshrc`；Windows cmd / PowerShell 没有 `alias`，
-> 请直接用完整 `node "..."` 路径，或自建 `.cmd` 包装脚本。
+> 想长期生效就把这几行写进 `~/.bashrc` / `~/.zshrc`。
+>
+> **Windows 用户注意**：cmd / PowerShell **不展开 `$SKILL_ROOT` 这种 bash 变量**，也没有 `alias`。
+> ```bat
+> REM cmd：直接用完整路径（换成你的实际安装位置）
+> node "%USERPROFILE%\.agents\skills\deepseek-brain\scripts\dsb\cli.mjs" doctor --json
+> ```
+> ```powershell
+> # PowerShell：可先设变量，同一会话内后续命令都能用
+> $SKILL_ROOT = "$env:USERPROFILE\.agents\skills\deepseek-brain"
+> node "$SKILL_ROOT\scripts\dsb\cli.mjs" doctor --json
+> ```
+> 写进 PowerShell 的 `$PROFILE` 即可长期生效。
 
 ### 首次配置做了什么
 
