@@ -356,6 +356,10 @@ node scripts/dsb/tests/sanitize.test.mjs
 | 模型可选 | ✗（只有思考/搜索开关） | ✓（Flash-Lite / Flash / Pro） | ✓（快速 / 2.1 Turbo） |
 | 登录持久化 | 简单 | **复杂**（需三重保险） | 简单 |
 
-## License
+## 许可证
 
-MIT
+本项目基于 MIT License 开源。
+
+## 社区
+
+本项目在 LINUX DO 社区进行开源推广，感谢社区佬友的交流、反馈与建议。
