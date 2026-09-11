@@ -52,18 +52,20 @@
 - 系统已装 **Chrome / Edge / Brave / Chromium** 任一（自动探测，不下载 Chromium）
 - 能访问 `chat.deepseek.com` 的**浏览器**（Node 直连可能因 TLS/代理失败，不影响使用）
 - 一个 DeepSeek 账号（**无需 API key**）
-- **需要图形界面**：首次配置会打开有头浏览器请你本人登录，纯 SSH / 容器环境无法完成
+- **需要图形界面**：整个工具依赖有头浏览器（首次配置要请你本人登录，之后每次问答也会真实打开窗口），纯 SSH / 容器环境**无法使用**
 
 ### 作为 Skill 安装
 
-本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**仓库内部无需修改任何路径**
-（命令行入口另需按下一节配置 `SKILL_ROOT` 或使用完整路径）。
+本仓库根目录就是 skill 目录，clone 到宿主的 skills 目录即可，**仓库文件内无硬编码路径**
+（shell 里仍需按下一节设置 `SKILL_ROOT` 或使用完整 `node "..."` 路径才能调用）。
 目标目录不存在时先建父目录（`git clone` 不会自动创建）：
 
 ```bash
 mkdir -p ~/.claude/skills ~/.codex/skills ~/.agents/skills   # 已存在则无副作用
-# Windows cmd:  mkdir "%USERPROFILE%\.claude\skills"
-# PowerShell:   mkdir "$env:USERPROFILE\.claude\skills" -Force
+# Windows cmd（三个父目录一次建好，REM 为注释）:
+#   mkdir "%USERPROFILE%\.claude\skills" "%USERPROFILE%\.codex\skills" "%USERPROFILE%\.agents\skills"
+# PowerShell:
+#   "$env:USERPROFILE\.claude\skills","$env:USERPROFILE\.codex\skills","$env:USERPROFILE\.agents\skills" | ForEach-Object { mkdir $_ -Force }
 
 # 三条命令按你的宿主任选其一，不要全都执行
 git clone https://github.com/ops120/deepseek-brain ~/.claude/skills/deepseek-brain     # Claude Code
@@ -157,9 +159,10 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 | `login` | 重新登录（登录态失效时用） | `--timeout <ms>` |
 | `logout` | 清除登录态（删除 `profile/` 目录） | — |
 | `doctor` | 体检 | `--deep`（真机探测页面/选择器；**同时才会检查登录态**）、`--html`（存页面 HTML，doctor 专有；全局的 `--debug` 也会存页面对比排障） |
-| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread new`（省略则复用当前线程）、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout`、`--allow-sensitive`、`--allow-large` |
+| `ask` | 提问 | `--prompt` / `--prompt-file`、`--think on\|off`、`--search on\|off`、`--attach`、`--thread new`（省略则复用当前线程）、`--protocol <状态>`、`--task <id>`、`--iteration <n>`、`--timeout <ms>`、`--allow-sensitive`、`--allow-large` |
 | `thread` | 线程管理 | `status` / `use <url>` / `new` |
-| `session` | 工作区级线程与检查点 | `get` / `set`（见下方示例） |
+| `session` | 工作区级线程与检查点 | `get`；`set --protocol-state <状态> --waiting-for <值> --next-step "..."`
+  （`--waiting-for`: `none` / `BRAIN_PLAN` / `BRAIN_REVIEW` / `USER`） |
 | `logs` | 查看脱敏日志 | `-n <行数>`、`--verbose` |
 | `update-check` | 检查更新 | `--force` |
 
@@ -211,7 +214,7 @@ node "$SKILL_ROOT/scripts/dsb/cli.mjs" ask --prompt "..." --thread new --json
 
 - `modes.requested` —— 你要求的开关状态
 - `modes.confirmed` —— **根据回答内证据推断**的生效状态（不是站点 UI/请求层面的权威确认）：
-  - `think` → 回答里是否出现推理块
+  - `think` → 本次发送前后推理块数量是否增加（用差值判定，避免历史推理块误判）
   - `search` → 回答里是否带引用来源 / 是否出现「搜索到 N 个网页」
   - **两者不一致时必须在回复里标注**，不要默认生效
 - `truncated` —— `true` 表示可能被截断（超时或流式停滞），需要如实告知用户
@@ -238,6 +241,9 @@ dsb ask --protocol INIT --task dsb_f81a --iteration 0 --prompt-file goal.txt --j
 # ③ 汇报（正文只写元数据：改了哪些文件、测试结果；不贴 diff / 不贴日志）
 dsb ask --protocol EXECUTED --iteration 1 --prompt-file report.txt --json
 #    → DONE = 结束 | PLAN = 还有下一轮 | BLOCKED = 停下
+
+# ④ 复核（需要对方复盘时用 REVIEW；回复状态同样解析为 DONE / PLAN / BLOCKED）
+dsb ask --protocol REVIEW --iteration 2 --prompt-file review-request.txt --json
 
 # 查进度（checkpoint 自动落盘）
 dsb thread status --json
@@ -289,7 +295,8 @@ dsb thread status --json
 | `SENSITIVE_BLOCKED` | 闸门拦截 | 移除敏感内容；确需发送须用户明确同意后加 `--allow-sensitive`——它会**关闭全部脱敏**（密钥形状、家目录路径等按原文发往站点），仅保留私钥块仍拒绝，请务必确认用户知情 |
 | `PAYLOAD_TOO_LARGE` | 正文超 50 KB | 摘要或分片；`--allow-large` 放宽到 200 KB |
 
-**硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次。
+**硬规则**：绝不把失败伪装成结果；绝不静默降级后不告知；同类失败最多重试 2 次
+（表中标注「重试一次」的失败码也计入这 2 次总额度）。
 
 ## 状态、缓存与隐私
 
@@ -308,7 +315,7 @@ Linux    $XDG_STATE_HOME/deepseek-brain/   （该变量未设置时通常为 ~/.
 | `threads/<workspaceId>.json` | 工作区级线程与检查点 |
 | `outputs/<workspaceId>.jsonl` | 审计：每次问答一行**元数据**（requestId、模式、耗时、是否截断） |
 | `logs/dsb.log` | 脱敏日志（`dsb logs` 查看） |
-| `debug/` | 仅 `--debug` 或失败时保存的页面 HTML / 截图 —— ⚠️ **可能含回答正文与你的输入，未脱敏**，排障后建议删除；**不要直接上传到公开 issue** |
+| `debug/` | `--debug`、`doctor --html` 或失败时保存的页面 HTML / 截图 —— ⚠️ **可能含回答正文与你的输入，未脱敏**，排障后建议删除；**不要直接上传到公开 issue** |
 
 **隐私要点**：
 
@@ -427,6 +434,8 @@ node "$SKILL_ROOT/scripts/dsb/tests/sanitize.test.mjs"
 | 生视频 | ✗ | ✗ | ✓（1280×720） |
 | 模型可选 | ✗（只有思考/搜索开关） | ✓（Flash-Lite / Flash / Pro） | ✓（快速 / 2.1 Turbo） |
 | 登录持久化 | 简单 | **复杂**（需三重保险） | 简单 |
+
+> 上表涉及他仓的能力、分辨率与模型档位，仅供参考，**以各自仓库的最新 README 为准**。
 
 ## 许可证
 
